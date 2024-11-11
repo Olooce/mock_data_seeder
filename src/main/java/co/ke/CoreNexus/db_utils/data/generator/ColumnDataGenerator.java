@@ -25,36 +25,13 @@ public class ColumnDataGenerator {
         String columnName = column.getName().toLowerCase();
         int columnLength = column.getSize();
 
-        // Context-based generation
-        if (isNameColumn(columnName)) {
-            return faker.name().fullName();
+        // Try context-based generation first
+        Object contextData = ContextGenerator.generateFromContext(columnName, columnLength);
+        if (contextData != null) {
+            return contextData;
         }
 
-        if (isEmailColumn(columnName)) {
-            return faker.internet().emailAddress();
-        }
-
-        if (isPhoneColumn(columnName)) {
-            return faker.phoneNumber().cellPhone();
-        }
-
-        if (isAddressColumn(columnName)) {
-            return faker.address().fullAddress();
-        }
-
-        if (isDateColumn(columnName)) {
-            return faker.date().birthday();
-        }
-
-        if (isGenderColumn(columnName)) {
-            return faker.bool().bool() ? "Male" : "Female";
-        }
-
-        if (isAgeColumn(columnName)) {
-            return faker.number().numberBetween(18, 100);
-        }
-
-        // Handle other types using Faker based on column type
+        // Fallback to type-based generation using Faker
         return switch (column.getType().toUpperCase()) {
             case "VARCHAR", "TEXT" -> generateStringValue(columnLength);
             case "INTEGER" -> faker.number().randomDigitNotZero();
@@ -64,34 +41,6 @@ public class ColumnDataGenerator {
             case "TIMESTAMP" -> faker.date().birthday();
             default -> null;
         };
-    }
-
-    private boolean isNameColumn(String columnName) {
-        return columnName.contains("name") || columnName.contains("full_name") || columnName.contains("first_name");
-    }
-
-    private boolean isEmailColumn(String columnName) {
-        return columnName.contains("email");
-    }
-
-    private boolean isPhoneColumn(String columnName) {
-        return columnName.contains("phone") || columnName.contains("mobile");
-    }
-
-    private boolean isAddressColumn(String columnName) {
-        return columnName.contains("address") || columnName.contains("street");
-    }
-
-    private boolean isDateColumn(String columnName) {
-        return columnName.contains("dob") || columnName.contains("birth") || columnName.contains("date");
-    }
-
-    private boolean isGenderColumn(String columnName) {
-        return columnName.contains("gender");
-    }
-
-    private boolean isAgeColumn(String columnName) {
-        return columnName.contains("age");
     }
 
     private String generateStringValue(int maxLength) {
