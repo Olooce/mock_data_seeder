@@ -23,7 +23,7 @@ public class DatabaseConnector {
     // Initialize the connection pool
     static {
         try {
-            Properties properties = loadProperties("db.properties");
+            Properties properties = loadProperties();
             HikariConfig config = new HikariConfig();
 
             // Set database connection properties
@@ -52,11 +52,11 @@ public class DatabaseConnector {
     }
 
     // Load properties from the db.properties file
-    private static Properties loadProperties(String fileName) throws IOException {
+    private static Properties loadProperties() throws IOException {
         Properties properties = new Properties();
-        try (InputStream input = DatabaseConnector.class.getClassLoader().getResourceAsStream(fileName)) {
+        try (InputStream input = DatabaseConnector.class.getClassLoader().getResourceAsStream("db.properties")) {
             if (input == null) {
-                throw new IOException("Property file '" + fileName + "' not found in the classpath.");
+                throw new IOException("Property file '" + "db.properties" + "' not found in the classpath.");
             }
             properties.load(input);
         }

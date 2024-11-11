@@ -4,9 +4,13 @@ import co.ke.CoreNexus.db_utils.db.connection.DatabaseConnector;
 import co.ke.CoreNexus.db_utils.db.metadata.models.ColumnInfo;
 import co.ke.CoreNexus.db_utils.db.metadata.models.TableInfo;
 import com.github.javafaker.Faker;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.*;
 
 /**
  * mock_data_scedar (co.ke.CoreNexus.db_utils.data.generator)
@@ -17,13 +21,11 @@ import java.util.regex.*;
 
 public class DataGenerator {
 
-    private Faker faker;
-    private DatabaseConnector databaseConnector;
+    private final Faker faker;
 
     // Constructor initializes Faker instance
-    public DataGenerator(DatabaseConnector databaseConnector) {
+    public DataGenerator() {
         this.faker = new Faker();
-        this.databaseConnector = databaseConnector;
     }
 
     // Method to generate random data for a table based on its schema
@@ -123,7 +125,7 @@ public class DataGenerator {
         List<Object> foreignKeyValues = new ArrayList<>();
         String query = String.format("SELECT %s FROM %s", referencedColumn, referencedTable);
 
-        try (Connection conn = databaseConnector.getConnection();
+        try (Connection conn = DatabaseConnector.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query);
              ResultSet rs = stmt.executeQuery()) {
 
@@ -136,24 +138,6 @@ public class DataGenerator {
         }
 
         return foreignKeyValues;
-    }
-
-    public List<Object> generateDataForTable(List<ColumnInfo> columns) {
-        List<Object> rowData = new ArrayList<>();
-
-        for (ColumnInfo column : columns) {
-            if (column.isForeignKey()) {
-                // Generate foreign key value based on the column reference
-                Object fkValue = generateForeignKeyValue(column.getReferencedTable(), column.getReferencedColumn(), column.getType());
-                rowData.add(fkValue);
-            } else {
-                // Generate data for regular column
-                Object value = generateDataForColumn(column);
-                rowData.add(value);
-            }
-        }
-
-        return rowData;
     }
 
 }
