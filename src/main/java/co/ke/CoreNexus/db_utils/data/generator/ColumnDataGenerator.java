@@ -26,7 +26,7 @@ public class ColumnDataGenerator {
         int columnLength = column.getSize();
 
         // Try context-based generation first
-        Object contextData = ContextGenerator.generateFromContext(columnName, columnLength);
+        Object contextData = ContextGenerator.generateFromContext(columnName, column.getType(), columnLength);
         if (contextData != null) {
             return contextData;
         }

@@ -32,7 +32,7 @@ public class ContextGenerator {
         } else if (columnName.contains("phone")) {
             return generatePhoneNumber(); // realistic phone number
         } else if (columnName.contains("price") || columnName.contains("amount") || columnName.contains("fee")) {
-            return generatePrice(); // realistic price or fee
+            return generatePrice(columnType); // realistic price or fee
         } else if (columnName.contains("salary") || columnName.contains("income")) {
             return generateSalary(); // realistic salary
         } else if (columnName.contains("transaction")) {
@@ -93,9 +93,18 @@ public class ContextGenerator {
         return faker.number().digits(13);  // ISBN typically has 13 digits
     }
 
-    private static String generatePrice() {
-        // Generate a realistic price or amount (decimal value)
-        return "$" + faker.commerce().price();
+    private static Object generatePrice(String columnType) {
+        // Generate a realistic price or amount, considering column type
+        String price = faker.commerce().price();
+        if ("decimal".equalsIgnoreCase(columnType)) {
+            // Return a price as a decimal value
+            return Double.parseDouble(price.replace("$", ""));
+        } else if ("integer".equalsIgnoreCase(columnType)) {
+            // Return a rounded price as an integer
+            return Integer.parseInt(price.replace("$", "").split("\\.")[0]);
+        }
+        // Default to returning price as a string if no type is matched
+        return "$" + price;
     }
 
     private static String generateSalary() {
