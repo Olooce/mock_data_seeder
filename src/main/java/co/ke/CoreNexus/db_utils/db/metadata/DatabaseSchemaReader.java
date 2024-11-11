@@ -43,11 +43,9 @@ public class DatabaseSchemaReader {
         // Get database metadata
         DatabaseMetaData metaData = connection.getMetaData();
 
-        try (ResultSet tablesResultSet = metaData.getTables(databaseName, "public", null, new String[]{"TABLE"})) {
+        try (ResultSet tablesResultSet = metaData.getTables(databaseName, null, null, new String[]{"TABLE"})) {
             while (tablesResultSet.next()) {
                 tablesFound = true;
-                String tableName = tablesResultSet.getString("TABLE_NAME");
-                System.out.println("Found table: " + tableName);
             }
         }
 
@@ -77,7 +75,7 @@ public class DatabaseSchemaReader {
 
             // If tables are found but no schemas are returned, create the default schema
             if (tablesFound && schemas.isEmpty()) {
-                System.out.println("No schemas found, creating default schema...");
+                System.out.println("No schemas returned but found tables, creating default schema...");
                 SchemaInfo defaultSchema = new SchemaInfo("default");
 
                 // Add all tables to the "default" schema

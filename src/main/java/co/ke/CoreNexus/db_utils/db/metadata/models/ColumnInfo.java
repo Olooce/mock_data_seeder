@@ -30,4 +30,5 @@ public class ColumnInfo {
     public int getSize() {
         return size;
     }
+
 }

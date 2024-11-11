@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
  * On: 11/11/2024. 20:43
  * Description:
  **/
-
 public class DataGenerator {
 
     private final Faker faker;
@@ -46,6 +45,7 @@ public class DataGenerator {
     // Method to generate data for a specific column based on its type and name
     private Object generateDataForColumn(ColumnInfo column, Map<String, Object> rowData) {
         String columnName = column.getName().toLowerCase();
+        int columnLength = column.getSize();
 
         // Gender-based logic based on column name or first name
         if (columnName.contains("gender")) {
@@ -73,9 +73,9 @@ public class DataGenerator {
             return faker.internet().emailAddress();  // Generate an email address
         }
 
-        // For other standard columns, use data types
+        // For other standard columns, use data types and respect column length
         return switch (column.getType().toUpperCase()) {
-            case "VARCHAR", "TEXT" -> faker.lorem().word(); // Generates a random word
+            case "VARCHAR", "TEXT" -> generateStringValue(columnLength); // Respect string length
             case "INTEGER" -> faker.number().randomDigitNotZero(); // Generates a random non-zero integer
             case "BIGINT" -> faker.number().randomNumber(); // Generates a random large number
             case "BOOLEAN" -> faker.bool().bool(); // Generates a random boolean value
@@ -83,6 +83,12 @@ public class DataGenerator {
             case "TIMESTAMP" -> faker.date().birthday(); // Generates a random timestamp (birthday for simplicity)
             default -> null; // If unknown type, return null
         };
+    }
+
+    // Method to generate a random string that respects the column length
+    private String generateStringValue(int maxLength) {
+        String randomValue = faker.lorem().word();
+        return randomValue.length() > maxLength ? randomValue.substring(0, maxLength) : randomValue;
     }
 
     // Method to generate gender based on the first name provided
