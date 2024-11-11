@@ -25,6 +25,16 @@ public class DatabaseSchemaReader {
 
     // Method to retrieve schema information
     public Map<String, SchemaInfo> getSchemaInfo() throws SQLException {
+
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT DATABASE();")) {
+            if (rs.next()) {
+                System.out.println("Current database: " + rs.getString(1));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
         Map<String, SchemaInfo> schemas = new HashMap<>();
 
         // Get database metadata
@@ -34,6 +44,7 @@ public class DatabaseSchemaReader {
         try (ResultSet schemasResultSet = metaData.getSchemas()) {
             while (schemasResultSet.next()) {
                 String schemaName = schemasResultSet.getString("TABLE_SCHEM");
+                System.out.println("Found schema: " + schemaName);
                 SchemaInfo schemaInfo = new SchemaInfo(schemaName);
 
                 // Get all tables for this schema

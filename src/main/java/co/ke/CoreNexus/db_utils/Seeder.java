@@ -30,15 +30,26 @@ public class Seeder {
             DatabaseSchemaReader databaseMetadata = new DatabaseSchemaReader(connection);
             Map<String, SchemaInfo> schemas = databaseMetadata.getSchemaInfo();
 
+            System.out.println("Schemas found: " + schemas.size());
+            if (schemas.isEmpty()) {
+                System.out.println("No schemas found in the database.");
+            }
+
             // Initialize data generator
             DataGenerator dataGenerator = new DataGenerator();
 
             // Seed data for each schema and its tables
             for (SchemaInfo schema : schemas.values()) {
+                System.out.println("Processing schema: " + schema.getName());
                 for (TableInfo table : schema.getTables().values()) {
-                    System.out.println("Seeding data for table: " + table.getName() + " in schema: " + schema.getName());
+                    System.out.println("Seeding data for table: " + table.getName());
                     List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, rowCount);
-                    insertDataIntoTable(connection, table, generatedData);
+                    System.out.println("Generated data for table " + table.getName() + ": " + generatedData.size() + " rows");
+                    if (!generatedData.isEmpty()) {
+                        insertDataIntoTable(connection, table, generatedData);
+                    } else {
+                        System.out.println("No data generated for table: " + table.getName());
+                    }
                 }
             }
 
