@@ -50,4 +50,12 @@ public class TableInfo {
     public Map<String, String> getForeignKeys() {
         return foreignKeys;
     }
+
+    public List<String> getColumnNames() {
+        List<String> columnNames = new ArrayList<>();
+        for (ColumnInfo columnInfo : columns) {
+            columnNames.add(columnInfo.getName());
+        }
+        return columnNames;
+    }
 }
