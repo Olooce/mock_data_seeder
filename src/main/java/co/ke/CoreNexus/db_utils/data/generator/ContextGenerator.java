@@ -55,9 +55,15 @@ public class ContextGenerator {
             return generateProjectTitle(); // realistic project title
         } else if (columnName.contains("url")) {
             return generateUrl(); // realistic URL
+        }  else if (columnName.equals("genre")) {
+        return generateGenre();
+        } else if (columnName.equals("availability")) {
+            return generateAvailability();
         }
+        else if (columnName.equals("shelf_location")) {
+            return generateShelfLocation();}
 
-        // Add more context-based handling as needed
+            // Add more context-based handling as needed
 
         return null; // Return null if no context-based generation is applied
     }
