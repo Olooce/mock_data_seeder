@@ -28,7 +28,10 @@ public class Seeder {
     private static final ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
 
     public static void main(String[] args) {
-        int rowCount = 50;
+        Thread statusLogger = new Thread(new StatusLogger(), "StatusLogger");
+        statusLogger.start();
+
+        int rowCount = 500000;
 
         try (Connection connection = DatabaseConnector.getConnection()) {
             DatabaseSchemaReader databaseMetadata = new DatabaseSchemaReader(connection);
@@ -46,7 +49,7 @@ public class Seeder {
             List<Callable<Void>> tasks = new ArrayList<>();
             for (SchemaInfo schema : schemas.values()) {
                 tasks.add(() -> {
-                    processSchema(connection, dataGenerator, schema, rowCount);
+                    processSchema(dataGenerator, schema, rowCount);
                     return null;
                 });
             }
@@ -60,6 +63,7 @@ public class Seeder {
         } finally {
             executor.shutdown();
             DatabaseConnector.close();
+            statusLogger.interrupt();  // Stop the status logger
         }
     }
 
@@ -89,33 +93,32 @@ public class Seeder {
         }
     }
 
-    private static void insertDataIntoTable(Connection connection, TableInfo table, List<Map<String, Object>> data) throws SQLException {
-        String tableName = table.getName();
-        List<String> columnNames = table.getColumnNames();
+    private static List<TableInfo> getTablesInInsertOrder(List<TableInfo> tables, Map<String, TableInfo> tableMap) {
+        List<TableInfo> orderedTables = new ArrayList<>();
+        Set<String> processedTables = new HashSet<>();
 
-        StringBuilder sql = new StringBuilder("INSERT INTO ").append(tableName).append(" (")
-                .append(String.join(", ", columnNames)).append(") VALUES (")
-                .append("?,".repeat(columnNames.size()).substring(0, columnNames.size() * 2 - 1)).append(")");
-
-        try (PreparedStatement stmt = connection.prepareStatement(sql.toString())) {
-            connection.setAutoCommit(false);
-
-            for (Map<String, Object> row : data) {
-                for (int i = 0; i < columnNames.size(); i++) {
-                    stmt.setObject(i + 1, row.get(columnNames.get(i)));
-                }
-                stmt.addBatch();
+        // First pass: Identify tables with no foreign keys
+        for (TableInfo table : tables) {
+            if (hasNoForeignKeyConstraints(table)) {
+                orderedTables.add(table);
+                processedTables.add(table.getName());
             }
-
-            stmt.executeBatch();
-            connection.commit();
-            System.out.println("Data inserted into table: " + tableName);
-        } catch (SQLException e) {
-            connection.rollback();
-            throw e;
-        } finally {
-            connection.setAutoCommit(true);  // Reset to default
         }
+
+        // Second pass: Process tables with foreign key dependencies
+        boolean added = true;
+        while (processedTables.size() < tables.size() && added) {
+            added = false;
+            for (TableInfo table : tables) {
+                if (!processedTables.contains(table.getName()) && canBeInserted(table, processedTables, tableMap)) {
+                    orderedTables.add(table);
+                    processedTables.add(table.getName());
+                    added = true;  // Mark that we've added a table
+                }
+            }
+        }
+
+        return orderedTables;
     }
 
     private static boolean hasNoForeignKeyConstraints(TableInfo table) {
@@ -133,54 +136,50 @@ public class Seeder {
         return true;
     }
 
-    private static void insertDataIntoTable(TableInfo table, List<Map<String, Object>> data) throws SQLException {
+
+    private static void insertDataIntoTable(Connection connection, TableInfo table, List<Map<String, Object>> data) throws SQLException {
         String tableName = table.getName();
         List<String> columnNames = table.getColumnNames();
 
-        Connection connection = DatabaseConnector.getConnection();
+        StringBuilder sql = new StringBuilder("INSERT INTO ").append(tableName).append(" (")
+                .append(String.join(", ", columnNames)).append(") VALUES (")
+                .append("?,".repeat(columnNames.size()).substring(0, columnNames.size() * 2 - 1)).append(")");
 
-        // Build SQL insert statement dynamically based on column names
-        StringBuilder sql = new StringBuilder("INSERT INTO " + tableName + " (");
-        sql.append(String.join(", ", columnNames));
-        sql.append(") VALUES (");
-        sql.append("?,".repeat(columnNames.size()).substring(0, columnNames.size() * 2 - 1));
-        sql.append(")");
-
-        // Each thread gets its own PreparedStatement
         try (PreparedStatement stmt = connection.prepareStatement(sql.toString())) {
-            // Start transaction
             connection.setAutoCommit(false);
 
-            // Batch insert data
             for (Map<String, Object> row : data) {
                 for (int i = 0; i < columnNames.size(); i++) {
                     stmt.setObject(i + 1, row.get(columnNames.get(i)));
                 }
                 stmt.addBatch();
+                insertedRecords.incrementAndGet();
             }
 
-            // Execute batch for this chunk
             stmt.executeBatch();
-            connection.commit();  // Commit after batch execution
-
+            connection.commit();
             System.out.println("Data inserted into table: " + tableName);
         } catch (SQLException e) {
-            e.printStackTrace();
+            connection.rollback();
+            throw e;
         } finally {
-            try {
-                // Reset auto-commit to default behavior
-                connection.setAutoCommit(true);
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+            connection.setAutoCommit(true);  // Reset to default
         }
     }
 
-
-    private static void logInsertion(String tableName, int rowCount) {
-        // Periodic logging with timestamp and time taken
-        System.out.println("Inserted " + rowCount + " rows into " + tableName + " at " + new Date() +
-                ". Total records inserted: " + insertedRecords.get());
+    // Nested class to handle status logging
+    private static class StatusLogger implements Runnable {
+        @Override
+        public void run() {
+            while (!Thread.currentThread().isInterrupted()) {
+                System.out.println("Total records inserted so far: " + insertedRecords.get() + " at " + new Date());
+                try {
+                    Thread.sleep(5000);  // Log status every 5 seconds
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
     }
 }
 
