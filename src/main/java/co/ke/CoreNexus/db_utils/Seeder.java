@@ -10,9 +10,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -22,16 +20,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Description:
  **/
 public class Seeder {
-    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 2;
+    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 3;
 
     private static final AtomicInteger insertedRecords = new AtomicInteger(0);
-    private static final ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-    private static final int CHUNK_SIZE = 100 ;
+    private static final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private static final int CHUNK_SIZE = 500;
 
     public static void main(String[] args) {
         Thread statusLogger = new Thread(new StatusLogger(), "StatusLogger");
 
-        int rowCount = 500000;
+        int rowCount = 5000;
 
         try (Connection connection = DatabaseConnector.getConnection()) {
             DatabaseSchemaReader databaseMetadata = new DatabaseSchemaReader(connection);
@@ -111,7 +109,10 @@ public class Seeder {
                     break; // Stop if there is an error with inserting
                 }
             }
+            // Random sleep after each chunk insertion
+            randomSleep();
         }
+
     }
     private static List<TableInfo> getTablesInInsertOrder(List<TableInfo> tables, Map<String, TableInfo> tableMap) {
         List<TableInfo> orderedTables = new ArrayList<>();
@@ -186,12 +187,23 @@ public class Seeder {
         }
     }
 
+    private static void randomSleep() {
+        try {
+            // Sleep for a random time between 100 and 500 milliseconds
+            int sleepTime = ThreadLocalRandom.current().nextInt(100, 501);
+            Thread.sleep(sleepTime);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();  // Restore interrupt status
+        }
+    }
+
     // Nested class to handle status logging
     private static class StatusLogger implements Runnable {
         @Override
         public void run() {
             while (!Thread.currentThread().isInterrupted()) {
                 System.out.println("Total records inserted so far: " + insertedRecords.get() + " at " + new Date());
+                System.out.println("Active threads: " + executor.getActiveCount());
                 try {
                     Thread.sleep(5000);  // Log status every 5 seconds
                 } catch (InterruptedException e) {
