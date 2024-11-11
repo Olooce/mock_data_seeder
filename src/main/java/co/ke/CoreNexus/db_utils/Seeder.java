@@ -24,12 +24,12 @@ public class Seeder {
 
     private static final AtomicInteger insertedRecords = new AtomicInteger(0);
     private static final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-    private static final int CHUNK_SIZE = 500;
+    private static final int CHUNK_SIZE = 50;
 
     public static void main(String[] args) {
         Thread statusLogger = new Thread(new StatusLogger(), "StatusLogger");
 
-        int rowCount = 5000;
+        int rowCount = 500;
 
         try (Connection connection = DatabaseConnector.getConnection()) {
             DatabaseSchemaReader databaseMetadata = new DatabaseSchemaReader(connection);
@@ -72,15 +72,19 @@ public class Seeder {
     private static void processSchema(DataGenerator dataGenerator, SchemaInfo schema, int rowCount) {
         System.out.println("Processing schema: " + schema.getName());
 
-        // Create tasks for each table
         List<Callable<Void>> tableTasks = new ArrayList<>();
         for (TableInfo table : getTablesInInsertOrder(new ArrayList<>(schema.getTables().values()), schema.getTables())) {
             tableTasks.add(() -> {
-                try (Connection connection = DatabaseConnector.getConnection()) { // New connection for each task
-                    generateAndInsertDataInChunks(dataGenerator, connection, table, rowCount, CHUNK_SIZE); // Insert in chunks of 50
-                } catch (SQLException e) {
-                    e.printStackTrace();
+                // Divide insertion work into multiple smaller tasks
+                List<Callable<Void>> chunkTasks = new ArrayList<>();
+                for (int i = 0; i < rowCount; i += CHUNK_SIZE) {
+                    int finalI = i;
+                    chunkTasks.add(() -> {
+                        generateAndInsertDataInChunks(dataGenerator, table, Math.min(50, rowCount - finalI), CHUNK_SIZE);
+                        return null;
+                    });
                 }
+                executor.invokeAll(chunkTasks);  // Execute chunk insertions in parallel
                 return null;
             });
         }
@@ -92,7 +96,8 @@ public class Seeder {
         }
     }
 
-    private static void generateAndInsertDataInChunks(DataGenerator dataGenerator, Connection connection, TableInfo table, int rowCount, int chunkSize) throws SQLException {
+    private static void generateAndInsertDataInChunks(DataGenerator dataGenerator, TableInfo table, int rowCount, int chunkSize) throws SQLException {
+        Connection connection = DatabaseConnector.getConnection();
         int generatedCount = 0;
         while (generatedCount < rowCount) {
             int remaining = rowCount - generatedCount;
