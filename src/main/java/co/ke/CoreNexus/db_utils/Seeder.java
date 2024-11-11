@@ -9,8 +9,7 @@ import co.ke.CoreNexus.db_utils.db.metadata.models.TableInfo;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * mock_data_seedar (co.ke.CoreNexus.db_utils)
@@ -38,10 +37,26 @@ public class Seeder {
             // Initialize data generator
             DataGenerator dataGenerator = new DataGenerator();
 
-            // Seed data for each schema and its tables
+            // Process each schema
             for (SchemaInfo schema : schemas.values()) {
                 System.out.println("Processing schema: " + schema.getName());
+
+                // Identify the tables to process
+                List<TableInfo> tables = new ArrayList<>(schema.getTables().values());
+                Map<String, TableInfo> tableMap = new HashMap<>();
                 for (TableInfo table : schema.getTables().values()) {
+                    tableMap.put(table.getName(), table);
+                }
+
+                // Create a list of tables in the correct order based on foreign key dependencies
+                List<TableInfo> orderedTables = getTablesInInsertOrder(tables, tableMap);
+
+                System.out.println("Order of tables for insertion: ");
+                orderedTables.forEach(table -> System.out.println(table.getName()));
+
+
+                // Seed data for each table in the correct order
+                for (TableInfo table : orderedTables) {
                     System.out.println("Seeding data for table: " + table.getName());
                     List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, rowCount);
                     System.out.println("Generated data for table " + table.getName() + ": " + generatedData.size() + " rows");
@@ -60,6 +75,51 @@ public class Seeder {
             DatabaseConnector.close();
         }
     }
+
+    private static List<TableInfo> getTablesInInsertOrder(List<TableInfo> tables, Map<String, TableInfo> tableMap) {
+        List<TableInfo> orderedTables = new ArrayList<>();
+        Set<String> processedTables = new HashSet<>();
+
+        // First pass: Identify tables with no foreign keys
+        for (TableInfo table : tables) {
+            if (hasNoForeignKeyConstraints(table)) {
+                orderedTables.add(table);
+                processedTables.add(table.getName());
+            }
+        }
+
+        // Second pass: Process tables with foreign key dependencies
+        boolean added = true;
+        while (processedTables.size() < tables.size() && added) {
+            added = false;
+            for (TableInfo table : tables) {
+                if (!processedTables.contains(table.getName()) && canBeInserted(table, processedTables, tableMap)) {
+                    orderedTables.add(table);
+                    processedTables.add(table.getName());
+                    added = true;  // Mark that we've added a table
+                }
+            }
+        }
+
+        return orderedTables;
+    }
+
+
+    private static boolean hasNoForeignKeyConstraints(TableInfo table) {
+        return table.getForeignKeys() == null || table.getForeignKeys().isEmpty();
+    }
+
+    private static boolean canBeInserted(TableInfo table, Set<String> processedTables, Map<String, TableInfo> tableMap) {
+        Map<String, String> foreignKeys = table.getForeignKeys();
+        for (Map.Entry<String, String> entry : foreignKeys.entrySet()) {
+            String referencedTable = entry.getValue();  // Get the referenced table
+            if (!processedTables.contains(referencedTable)) {
+                return false;  // Can't insert this table until the referenced table is processed
+            }
+        }
+        return true;
+    }
+
 
     private static void insertDataIntoTable(Connection connection, TableInfo table, List<Map<String, Object>> data) {
         String tableName = table.getName();
@@ -86,3 +146,4 @@ public class Seeder {
         }
     }
 }
+
