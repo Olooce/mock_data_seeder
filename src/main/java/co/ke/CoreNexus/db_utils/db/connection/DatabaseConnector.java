@@ -97,4 +97,15 @@ public class DatabaseConnector {
             throw new IllegalArgumentException("Unsupported JDBC URL: " + jdbcUrl);
         }
     }
+
+
+    // Shutdown hook to close the data source on JVM shutdown
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (!dataSource.isClosed()) {
+                dataSource.close();
+                System.out.println("Database connection pool closed on JVM shutdown.");
+            }
+        }));
+    }
 }
