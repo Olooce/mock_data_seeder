@@ -1,5 +1,7 @@
 package co.ke.CoreNexus.db_utils.db.metadata.models;
 
+import java.util.*;
+
 /**
  * mock_data_scedar (co.ke.CoreNexus.db_utils.db.metadata.models)
  * Created by: oloo

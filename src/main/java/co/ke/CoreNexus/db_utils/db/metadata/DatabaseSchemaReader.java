@@ -1,5 +1,9 @@
 package co.ke.CoreNexus.db_utils.db.metadata;
 
+import co.ke.CoreNexus.db_utils.db.metadata.models.ColumnInfo;
+import co.ke.CoreNexus.db_utils.db.metadata.models.SchemaInfo;
+import co.ke.CoreNexus.db_utils.db.metadata.models.TableInfo;
+
 import java.sql.*;
 import java.util.*;
 
@@ -12,7 +16,7 @@ import java.util.*;
 
 public class DatabaseSchemaReader {
 
-    private Connection connection;
+    private final Connection connection;
 
     // Constructor to initialize connection
     public DatabaseSchemaReader(Connection connection) {

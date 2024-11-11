@@ -1,5 +1,8 @@
 package co.ke.CoreNexus.db_utils.db.metadata.models;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * mock_data_scedar (co.ke.CoreNexus.db_utils.db.metadata.models)
  * Created by: oloo
