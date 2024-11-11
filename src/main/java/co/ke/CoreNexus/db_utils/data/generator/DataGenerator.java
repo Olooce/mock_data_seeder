@@ -50,27 +50,18 @@ public class DataGenerator {
 
         // Check if the column is part of the primary key
         if (tableInfo.getPrimaryKeys().contains(columnName)) {
-            // If it's the ISBN column, generate an ISBN
-            if (columnName.contains("isbn")) {
-                return faker.code().isbn13();  // Generate a valid ISBN (ISBN-13)
-            }
+            // For primary keys, generate based on column name pattern
+            String primaryKeyValue = generatePrimaryKeyFromColumnName(columnName);
 
-            // For other primary keys, generate based on column name pattern
-            String primaryKeyValue = columnName.replaceAll("_", "").toUpperCase();  // Remove underscores and capitalize
-            StringBuilder generatedKey = new StringBuilder();
-
-            // Take the first letter of each word in the column name
-            for (String word : primaryKeyValue.split("(?<=.)(?=\\p{Upper})")) {
-                generatedKey.append(word.charAt(0));  // Append first letter of each word
-            }
-
-            // Append random alphanumeric characters to meet the length requirement
+            // Append random alphanumeric characters to meet the column length
+            StringBuilder generatedKey = new StringBuilder(primaryKeyValue);
             while (generatedKey.length() < columnLength) {
-                generatedKey.append(Randomizer.generateRandomAlphanumeric(1));
+                generatedKey.append(Randomizer.generateRandomAlphanumeric(1));  // Append a random alphanumeric character
             }
 
             return generatedKey.toString();
         }
+
         // Check if the column is a foreign key
         if (tableInfo.getForeignKeys().containsKey(columnName)) {
             // Get the referenced table for the foreign key
@@ -116,6 +107,33 @@ public class DataGenerator {
             case "TIMESTAMP" -> faker.date().birthday(); // Generates a random timestamp (birthday for simplicity)
             default -> null; // If unknown type, return null
         };
+    }
+
+    // Method to generate primary key based on column name
+    private String generatePrimaryKeyFromColumnName(String columnName) {
+        // Normalize the column name to lowercase, remove underscores, and split by camelCase or snake_case
+        String normalizedColumnName = columnName.toLowerCase().replaceAll("_", " ");
+
+        // Split based on camel case (e.g., "staffId" -> "staff", "Id")
+        String[] words = normalizedColumnName.split("(?<=.)(?=\\p{Upper})|\\s+");
+
+        StringBuilder generatedKey = new StringBuilder();
+
+        // Loop through the words and append the first letter of each word
+        for (String word : words) {
+            if (word.equals("id")) {
+                generatedKey.append("ID");  // Special handling for 'id' to append 'ID'
+            } else {
+                generatedKey.append(word.charAt(0));  // Append the first letter of the word
+            }
+        }
+
+        // Check if 'ID' is at the end of the key, if not, append it
+        if (!generatedKey.toString().endsWith("ID")) {
+            generatedKey.append("ID");
+        }
+
+        return generatedKey.toString().toUpperCase();
     }
 
 
