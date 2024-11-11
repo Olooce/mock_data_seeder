@@ -1,6 +1,9 @@
 package co.ke.CoreNexus.db_utils.data.generator;
 
+import co.ke.CoreNexus.db_utils.db.connection.DatabaseConnector;
 import co.ke.CoreNexus.db_utils.db.utils.Randomizer;
+
+import java.sql.*;
 
 /**
  * mock_data_scedar (co.ke.CoreNexus.db_utils.data.generator)
@@ -8,34 +11,89 @@ import co.ke.CoreNexus.db_utils.db.utils.Randomizer;
  * On: 11/11/2024. 23:50
  * Description:
  **/
+
+
 public class PrimaryKeyGenerator {
 
-    private static Connection dbConnection;
+    private static final Connection dbConnection;
 
-    // Set the database connection
-    public static void setDbConnection(Connection connection) {
-        dbConnection = connection;
+    static {
+        try {
+            dbConnection = DatabaseConnector.getConnection();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
+
     // Generate the primary key based on column type and auto-increment status
-    public static Object generatePrimaryKeyFromColumnName(String columnName, String type, int columnSize, boolean isAutoIncrement) throws SQLException {
+    public static Object generatePrimaryKeyFromColumnName(String tableName, String columnName, String type, int columnSize) throws SQLException {
+        boolean isAutoIncrement = isAutoIncrement(tableName, columnName);
+        String sequenceName = null;
+        
         if (isAutoIncrement || isAutoIncrementType(type)) {
             // Auto-increment or SERIAL fields - let the database handle this
             return "";  // Empty string means the DB will handle it
         }
 
+        // Retrieve the sequence name if the column uses a sequence (like SERIAL in PostgreSQL)
+        if (type.equalsIgnoreCase("serial")) {
+            sequenceName = getSequenceName(tableName, columnName);
+        }
+
         // Handle INT and LONG types, generating the next value in sequence
         if (type.equalsIgnoreCase("int")) {
-            return generateNextInt();
+            return generateNextInt(tableName, columnName);
         } else if (type.equalsIgnoreCase("long")) {
-            return generateNextLong();
+            return generateNextLong(tableName, columnName);
         } else if (type.equalsIgnoreCase("serial")) {
-            return generateNextSerial();
+            return generateNextSerial(sequenceName);
         }
 
         // If it's not numeric or serial, handle it as a string-based primary key
         return generateStringPrimaryKey(columnName, columnSize);
     }
+
+    // Retrieve the sequence name used by a column (in case of SERIAL, for example)
+    private static String getSequenceName(String tableName, String columnName) throws SQLException {
+        String query = "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '" + tableName + "' AND COLUMN_NAME = '" + columnName + "'";
+        try (Statement stmt = dbConnection.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            if (rs.next()) {
+                String columnDefault = rs.getString("COLUMN_DEFAULT");
+                if (columnDefault != null && columnDefault.contains("nextval")) {
+                    // Extract the sequence name from the default value
+                    int startIdx = columnDefault.indexOf("'") + 1;
+                    int endIdx = columnDefault.lastIndexOf("'");
+                    return columnDefault.substring(startIdx, endIdx);
+                } else {
+                    throw new SQLException("No sequence found for the column.");
+                }
+            } else {
+                throw new SQLException("Failed to retrieve sequence name for column.");
+            }
+        }
+    }
+    // Check if the column is auto-increment (auto_increment or identity in the database)
+    private static boolean isAutoIncrement(String tableName, String columnName) throws SQLException {
+        String query = "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS " +
+                "WHERE TABLE_NAME = ? AND COLUMN_NAME = ? AND TABLE_SCHEMA = DATABASE()";
+
+        try (PreparedStatement stmt = dbConnection.prepareStatement(query)) {
+            stmt.setString(1, tableName);
+            stmt.setString(2, columnName);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String extra = rs.getString("EXTRA");
+                    return "auto_increment".equalsIgnoreCase(extra);
+                } else {
+                    throw new SQLException("Failed to retrieve column details for " + columnName);
+                }
+            }
+        }
+    }
+
 
     // Check if the column is auto-increment or SERIAL
     private static boolean isAutoIncrementType(String type) {
@@ -43,18 +101,18 @@ public class PrimaryKeyGenerator {
     }
 
     // Generate the next INT value in sequence (assuming INT is the primary key)
-    private static int generateNextInt() throws SQLException {
-        return getLastInsertedInt() + 1;
+    private static int generateNextInt(String tableName, String columnName) throws SQLException {
+        return getLastInsertedInt(tableName, columnName) + 1;
     }
 
     // Generate the next LONG value in sequence (assuming LONG is the primary key)
-    private static long generateNextLong() throws SQLException {
-        return getLastInsertedLong() + 1L;
+    private static long generateNextLong(String tableName, String columnName) throws SQLException {
+        return getLastInsertedLong(tableName, columnName) + 1L;
     }
 
-    // Generate the next SERIAL value (for databases that support SERIAL, like PostgreSQL)
-    private static int generateNextSerial() throws SQLException {
-        return getNextSerialFromDB();
+    // Generate the next SERIAL value from the sequence (for databases that support SERIAL, like PostgreSQL)
+    private static int generateNextSerial(String sequenceName) throws SQLException {
+        return getNextSerialFromDB(sequenceName);
     }
 
     // Generate a string-based primary key (used when the column is not INT, LONG, or SERIAL)
@@ -85,8 +143,8 @@ public class PrimaryKeyGenerator {
     // These methods interact with the database to get the last inserted values for INT, LONG, and SERIAL fields
 
     // Get the last inserted INT value from the database (could be using MAX(id) or LAST_INSERT_ID depending on DB)
-    private static int getLastInsertedInt() throws SQLException {
-        String query = "SELECT MAX(id) FROM your_table"; // Adjust the table name
+    private static int getLastInsertedInt(String tableName, String columnName) throws SQLException {
+        String query = "SELECT MAX(" + columnName + ") FROM " + tableName;
         try (Statement stmt = dbConnection.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
             if (rs.next()) {
@@ -98,8 +156,8 @@ public class PrimaryKeyGenerator {
     }
 
     // Get the last inserted LONG value from the database
-    private static long getLastInsertedLong() throws SQLException {
-        String query = "SELECT MAX(id) FROM your_table"; // Adjust the table name
+    private static long getLastInsertedLong(String tableName, String columnName) throws SQLException {
+        String query = "SELECT MAX(" + columnName + ") FROM " + tableName;
         try (Statement stmt = dbConnection.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
             if (rs.next()) {
@@ -111,8 +169,8 @@ public class PrimaryKeyGenerator {
     }
 
     // Get the next SERIAL value from the database (for PostgreSQL or similar)
-    private static int getNextSerialFromDB() throws SQLException {
-        String query = "SELECT nextval('your_sequence_name')"; // Adjust the sequence name
+    private static int getNextSerialFromDB(String sequenceName) throws SQLException {
+        String query = "SELECT nextval('" + sequenceName + "')";
         try (Statement stmt = dbConnection.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
             if (rs.next()) {
@@ -122,4 +180,4 @@ public class PrimaryKeyGenerator {
             }
         }
     }
-}}
+}

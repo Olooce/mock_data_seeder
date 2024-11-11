@@ -32,7 +32,7 @@ public class DataGenerator {
         this.columnDataGenerator = new ColumnDataGenerator();
     }
 
-    public List<Map<String, Object>> generateDataForTable(TableInfo tableInfo, int rowCount) {
+    public List<Map<String, Object>> generateDataForTable(TableInfo tableInfo, int rowCount) throws SQLException {
         List<Map<String, Object>> generatedData = new ArrayList<>();
 
         for (int i = 0; i < rowCount; i++) {
@@ -46,11 +46,11 @@ public class DataGenerator {
         return generatedData;
     }
 
-    private Object generateDataForColumn(ColumnInfo column, Map<String, Object> rowData, TableInfo tableInfo) {
+    private Object generateDataForColumn(ColumnInfo column, Map<String, Object> rowData, TableInfo tableInfo) throws SQLException {
         String columnName = column.getName().toLowerCase();
 
         if (tableInfo.getPrimaryKeys().contains(columnName)) {
-            return primaryKeyGenerator.generatePrimaryKeyFromColumnName(columnName, column.getType(), column.getSize());
+            return PrimaryKeyGenerator.generatePrimaryKeyFromColumnName(tableInfo.getName(), columnName, column.getType(), column.getSize());
         }
 
         if (tableInfo.getForeignKeys().containsKey(columnName)) {
