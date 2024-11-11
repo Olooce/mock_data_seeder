@@ -38,3 +38,8 @@ build/
 .DS_Store
 
 /src/main/resources/
+node_modules/
+coverage/
+.env
+Thumbs.db
+cmake-build-debug
