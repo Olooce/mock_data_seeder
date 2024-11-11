@@ -50,7 +50,7 @@ public class DataGenerator {
         String columnName = column.getName().toLowerCase();
 
         if (tableInfo.getPrimaryKeys().contains(columnName)) {
-            return primaryKeyGenerator.generatePrimaryKeyFromColumnName(columnName, column.getSize());
+            return primaryKeyGenerator.generatePrimaryKeyFromColumnName(columnName, column.getType(), column.getSize());
         }
 
         if (tableInfo.getForeignKeys().containsKey(columnName)) {

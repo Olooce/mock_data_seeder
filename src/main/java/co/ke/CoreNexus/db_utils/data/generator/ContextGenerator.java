@@ -11,6 +11,8 @@ import java.util.Date;
  * Description:
  **/
 
+
+// TODO: Find a better way of generating more context aware data. This no better than hardcoding.
 public class ContextGenerator {
 
     private static final Faker faker = new Faker();
@@ -62,10 +64,76 @@ public class ContextGenerator {
         }
         else if (columnName.equals("shelf_location")) {
             return generateShelfLocation();}
+        else if (columnName.equals("access_restriction")) {
+            return generateAccessRestriction(); // Access restriction
+        } else if (columnName.equals("license_information")) {
+            return generateLicenseInformation();}
 
             // Add more context-based handling as needed
 
         return null; // Return null if no context-based generation is applied
+    }
+
+    private static Object generateLicenseInformation() {
+        // List of common licenses for digital resources
+        String[] licenses = {
+                "MIT License",
+                "GPL",
+                "Apache License 2.0",
+                "Creative Commons Attribution 4.0 International License",
+                "All Rights Reserved",
+                "Public Domain"
+        };
+        // Return a random license from the list
+        return licenses[faker.number().numberBetween(0, licenses.length)];
+    }
+
+    private static Object generateAccessRestriction() {
+        // List of possible access restrictions for digital resources
+        String[] restrictions = {
+                "Open Access",
+                "Subscription Required",
+                "Restricted Access",
+                "Members Only",
+                "Institutional Access",
+                "Free Access"
+        };
+        // Return a random access restriction from the list
+        return restrictions[faker.number().numberBetween(0, restrictions.length)];
+    }
+
+    private static Object generateShelfLocation() {
+        // Example shelf locations (could be more dynamic if needed)
+        String[] shelfLocations = {
+                "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "J10"
+        };
+        // Return a random shelf location from the list
+        return shelfLocations[faker.number().numberBetween(0, shelfLocations.length)];
+    }
+
+    private static Object generateAvailability() {
+        // List of possible availability statuses for resources
+        String[] availabilityStatuses = {
+                "Available",
+                "Checked Out",
+                "Reserved",
+                "On Hold",
+                "In Repair",
+                "Out of Stock"
+        };
+        // Return a random availability status
+        return availabilityStatuses[faker.number().numberBetween(0, availabilityStatuses.length)];
+    }
+
+    private static Object generateGenre() {
+        // List of common book genres
+        String[] genres = {
+                "Fiction", "Non-fiction", "Mystery", "Science Fiction", "Fantasy",
+                "Biography", "Romance", "Historical", "Thriller", "Horror",
+                "Children's", "Young Adult", "Self-help", "Cookbook", "Poetry"
+        };
+        // Return a random genre from the list
+        return genres[faker.number().numberBetween(0, genres.length)];
     }
 
     private static String generateAuthorName(int maxLength) {
