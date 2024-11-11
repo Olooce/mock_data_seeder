@@ -43,9 +43,18 @@ public class DataGenerator {
     }
 
     // Method to generate data for a specific column based on its type and name
-    private Object generateDataForColumn(ColumnInfo column, Map<String, Object> rowData) {
+    private Object generateDataForColumn(ColumnInfo column, Map<String, Object> rowData, TableInfo tableInfo) {
         String columnName = column.getName().toLowerCase();
         int columnLength = column.getSize();
+
+        // Check if the column is a foreign key
+        if (tableInfo.getForeignKeys().containsKey(columnName)) {
+            // Get the referenced table for the foreign key
+            String referencedTable = tableInfo.getForeignKeys().get(columnName);
+
+            // Generate a valid foreign key value (this could involve querying the referenced table for a valid key)
+            return generateForeignKeyValue(referencedTable, columnName);
+        }
 
         // Gender-based logic based on column name or first name
         if (columnName.contains("gender")) {
@@ -85,6 +94,7 @@ public class DataGenerator {
         };
     }
 
+
     // Method to generate a random string that respects the column length
     private String generateStringValue(int maxLength) {
         String randomValue = faker.lorem().word();
@@ -116,7 +126,7 @@ public class DataGenerator {
         return uniqueValues;
     }
 
-    public Object generateForeignKeyValue(String referencedTable, String referencedColumn, String columnType) {
+    public Object generateForeignKeyValue(String referencedTable, String referencedColumn) {
         List<Object> validForeignKeys = getForeignKeyValuesFromReferencedTable(referencedTable, referencedColumn);
 
         // Randomly select a foreign key value from the valid values retrieved
