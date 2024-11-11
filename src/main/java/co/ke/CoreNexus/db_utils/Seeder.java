@@ -22,14 +22,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Description:
  **/
 public class Seeder {
-    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
+    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 2;
 
     private static final AtomicInteger insertedRecords = new AtomicInteger(0);
     private static final ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private static final int CHUNK_SIZE = 100 ;
 
     public static void main(String[] args) {
         Thread statusLogger = new Thread(new StatusLogger(), "StatusLogger");
-        statusLogger.start();
 
         int rowCount = 500000;
 
@@ -54,6 +54,8 @@ public class Seeder {
                 });
             }
 
+            statusLogger.start();
+
             // Execute all tasks in parallel
             executor.invokeAll(tasks);
 
@@ -62,8 +64,10 @@ public class Seeder {
             e.printStackTrace();
         } finally {
             executor.shutdown();
+            System.out.println("Total records inserted: " + insertedRecords.get() + ". Stopped at " + new Date());
             DatabaseConnector.close();
             statusLogger.interrupt();  // Stop the status logger
+
         }
     }
 
@@ -75,10 +79,7 @@ public class Seeder {
         for (TableInfo table : getTablesInInsertOrder(new ArrayList<>(schema.getTables().values()), schema.getTables())) {
             tableTasks.add(() -> {
                 try (Connection connection = DatabaseConnector.getConnection()) { // New connection for each task
-                    List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, rowCount);
-                    if (!generatedData.isEmpty()) {
-                        insertDataIntoTable(connection, table, generatedData);
-                    }
+                    generateAndInsertDataInChunks(dataGenerator, connection, table, rowCount, CHUNK_SIZE); // Insert in chunks of 50
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
@@ -93,6 +94,25 @@ public class Seeder {
         }
     }
 
+    private static void generateAndInsertDataInChunks(DataGenerator dataGenerator, Connection connection, TableInfo table, int rowCount, int chunkSize) throws SQLException {
+        int generatedCount = 0;
+        while (generatedCount < rowCount) {
+            int remaining = rowCount - generatedCount;
+            int currentChunkSize = Math.min(chunkSize, remaining);
+
+            // Generate a chunk of data
+            List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, currentChunkSize);
+            if (!generatedData.isEmpty()) {
+                try {
+                    insertDataIntoTable(connection, table, generatedData);
+                    generatedCount += generatedData.size();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                    break; // Stop if there is an error with inserting
+                }
+            }
+        }
+    }
     private static List<TableInfo> getTablesInInsertOrder(List<TableInfo> tables, Map<String, TableInfo> tableMap) {
         List<TableInfo> orderedTables = new ArrayList<>();
         Set<String> processedTables = new HashSet<>();
@@ -158,7 +178,6 @@ public class Seeder {
 
             stmt.executeBatch();
             connection.commit();
-            System.out.println("Data inserted into table: " + tableName);
         } catch (SQLException e) {
             connection.rollback();
             throw e;
