@@ -3,6 +3,7 @@ package co.ke.CoreNexus.db_utils.data.generator;
 import co.ke.CoreNexus.db_utils.db.connection.DatabaseConnector;
 import co.ke.CoreNexus.db_utils.db.metadata.models.ColumnInfo;
 import co.ke.CoreNexus.db_utils.db.metadata.models.TableInfo;
+import co.ke.CoreNexus.db_utils.db.utils.Randomizer;
 import com.github.javafaker.Faker;
 
 import java.sql.Connection;
@@ -34,7 +35,7 @@ public class DataGenerator {
         for (int i = 0; i < rowCount; i++) {
             Map<String, Object> rowData = new HashMap<>();
             for (ColumnInfo column : tableInfo.getColumns()) {
-                Object generatedValue = generateDataForColumn(column, rowData);
+                Object generatedValue = generateDataForColumn(column, rowData, tableInfo);
                 rowData.put(column.getName(), generatedValue);
             }
             generatedData.add(rowData);
@@ -47,6 +48,29 @@ public class DataGenerator {
         String columnName = column.getName().toLowerCase();
         int columnLength = column.getSize();
 
+        // Check if the column is part of the primary key
+        if (tableInfo.getPrimaryKeys().contains(columnName)) {
+            // If it's the ISBN column, generate an ISBN
+            if (columnName.contains("isbn")) {
+                return faker.code().isbn13();  // Generate a valid ISBN (ISBN-13)
+            }
+
+            // For other primary keys, generate based on column name pattern
+            String primaryKeyValue = columnName.replaceAll("_", "").toUpperCase();  // Remove underscores and capitalize
+            StringBuilder generatedKey = new StringBuilder();
+
+            // Take the first letter of each word in the column name
+            for (String word : primaryKeyValue.split("(?<=.)(?=\\p{Upper})")) {
+                generatedKey.append(word.charAt(0));  // Append first letter of each word
+            }
+
+            // Append random alphanumeric characters to meet the length requirement
+            while (generatedKey.length() < columnLength) {
+                generatedKey.append(Randomizer.generateRandomAlphanumeric(1));
+            }
+
+            return generatedKey.toString();
+        }
         // Check if the column is a foreign key
         if (tableInfo.getForeignKeys().containsKey(columnName)) {
             // Get the referenced table for the foreign key
@@ -118,10 +142,10 @@ public class DataGenerator {
     }
 
     // Method to generate unique values (to respect UNIQUE constraints)
-    public Set<Object> generateUniqueValues(ColumnInfo column, int count) {
+    public Set<Object> generateUniqueValues(TableInfo tableInfo, ColumnInfo column, int count) {
         Set<Object> uniqueValues = new HashSet<>();
         while (uniqueValues.size() < count) {
-            uniqueValues.add(generateDataForColumn(column, new HashMap<>()));
+            uniqueValues.add(generateDataForColumn(column, new HashMap<>(), tableInfo));
         }
         return uniqueValues;
     }
