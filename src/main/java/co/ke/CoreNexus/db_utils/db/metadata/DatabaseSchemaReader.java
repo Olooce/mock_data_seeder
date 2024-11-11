@@ -40,6 +40,13 @@ public class DatabaseSchemaReader {
         // Get database metadata
         DatabaseMetaData metaData = connection.getMetaData();
 
+        try (ResultSet tablesResultSet = metaData.getTables(null, "public", null, new String[]{"TABLE"})) {
+            while (tablesResultSet.next()) {
+                String tableName = tablesResultSet.getString("TABLE_NAME");
+                System.out.println("Found table: " + tableName);
+            }
+        }
+
         // Get all schemas
         try (ResultSet schemasResultSet = metaData.getSchemas()) {
             while (schemasResultSet.next()) {
