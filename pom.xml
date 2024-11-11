@@ -23,11 +23,11 @@
         </dependency>
 
         <!-- Apache Commons DbUtils for simplifying JDBC handling -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-dbutils</artifactId>
-            <version>1.7</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.apache.commons</groupId>-->
+<!--            <artifactId>commons-dbutils</artifactId>-->
+<!--            <version>1.7</version>-->
+<!--        </dependency>-->
 
         <!-- PostgreSQL Driver -->
         <dependency>
@@ -51,11 +51,11 @@
         </dependency>
 
         <!-- SQLite Driver -->
-        <dependency>
-            <groupId>org.xerial</groupId>
-            <artifactId>sqlite-jdbc</artifactId>
-            <version>3.41.2</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.xerial</groupId>-->
+<!--            <artifactId>sqlite-jdbc</artifactId>-->
+<!--            <version>3.41.2</version>-->
+<!--        </dependency>-->
 
         <!-- Microsoft SQL Server Driver -->
         <dependency>
@@ -78,6 +78,13 @@
             <artifactId>jcc</artifactId>
             <version>11.5.7.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.0.1</version>
+        </dependency>
+
     </dependencies>
 
 
