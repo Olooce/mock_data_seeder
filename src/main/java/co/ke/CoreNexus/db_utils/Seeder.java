@@ -10,6 +10,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * mock_data_seedar (co.ke.CoreNexus.db_utils)
@@ -17,93 +21,102 @@ import java.util.*;
  * On: 11/11/2024. 19:27
  * Description:
  **/
-
 public class Seeder {
+    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
+
+    private static final AtomicInteger insertedRecords = new AtomicInteger(0);
+    private static final ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
 
     public static void main(String[] args) {
-        // Number of rows to insert per table
         int rowCount = 50;
 
         try (Connection connection = DatabaseConnector.getConnection()) {
-            // Retrieve metadata for all schemas in the database
             DatabaseSchemaReader databaseMetadata = new DatabaseSchemaReader(connection);
             Map<String, SchemaInfo> schemas = databaseMetadata.getSchemaInfo();
 
             System.out.println("Schemas found: " + schemas.size());
             if (schemas.isEmpty()) {
                 System.out.println("No schemas found in the database.");
+                return;
             }
 
-            // Initialize data generator
             DataGenerator dataGenerator = new DataGenerator();
 
-            // Process each schema
+            // Process each schema in parallel
+            List<Callable<Void>> tasks = new ArrayList<>();
             for (SchemaInfo schema : schemas.values()) {
-                System.out.println("Processing schema: " + schema.getName());
-
-                // Identify the tables to process
-                List<TableInfo> tables = new ArrayList<>(schema.getTables().values());
-                Map<String, TableInfo> tableMap = new HashMap<>();
-                for (TableInfo table : schema.getTables().values()) {
-                    tableMap.put(table.getName(), table);
-                }
-
-                // Create a list of tables in the correct order based on foreign key dependencies
-                List<TableInfo> orderedTables = getTablesInInsertOrder(tables, tableMap);
-
-                System.out.println("Order of tables for insertion: ");
-                orderedTables.forEach(table -> System.out.println(table.getName()));
-
-
-                // Seed data for each table in the correct order
-                for (TableInfo table : orderedTables) {
-                    System.out.println("Seeding data for table: " + table.getName());
-                    List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, rowCount);
-                    System.out.println("Generated data for table " + table.getName() + ": " + generatedData.size() + " rows");
-                    if (!generatedData.isEmpty()) {
-                        insertDataIntoTable(connection, table, generatedData);
-                    } else {
-                        System.out.println("No data generated for table: " + table.getName());
-                    }
-                }
+                tasks.add(() -> {
+                    processSchema(connection, dataGenerator, schema, rowCount);
+                    return null;
+                });
             }
 
+            // Execute all tasks in parallel
+            executor.invokeAll(tasks);
+
             System.out.println("Seeding completed.");
-        } catch (SQLException e) {
+        } catch (SQLException | InterruptedException e) {
             e.printStackTrace();
         } finally {
+            executor.shutdown();
             DatabaseConnector.close();
         }
     }
 
-    private static List<TableInfo> getTablesInInsertOrder(List<TableInfo> tables, Map<String, TableInfo> tableMap) {
-        List<TableInfo> orderedTables = new ArrayList<>();
-        Set<String> processedTables = new HashSet<>();
+    private static void processSchema(DataGenerator dataGenerator, SchemaInfo schema, int rowCount) {
+        System.out.println("Processing schema: " + schema.getName());
 
-        // First pass: Identify tables with no foreign keys
-        for (TableInfo table : tables) {
-            if (hasNoForeignKeyConstraints(table)) {
-                orderedTables.add(table);
-                processedTables.add(table.getName());
-            }
-        }
-
-        // Second pass: Process tables with foreign key dependencies
-        boolean added = true;
-        while (processedTables.size() < tables.size() && added) {
-            added = false;
-            for (TableInfo table : tables) {
-                if (!processedTables.contains(table.getName()) && canBeInserted(table, processedTables, tableMap)) {
-                    orderedTables.add(table);
-                    processedTables.add(table.getName());
-                    added = true;  // Mark that we've added a table
+        // Create tasks for each table
+        List<Callable<Void>> tableTasks = new ArrayList<>();
+        for (TableInfo table : getTablesInInsertOrder(new ArrayList<>(schema.getTables().values()), schema.getTables())) {
+            tableTasks.add(() -> {
+                try (Connection connection = DatabaseConnector.getConnection()) { // New connection for each task
+                    List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, rowCount);
+                    if (!generatedData.isEmpty()) {
+                        insertDataIntoTable(connection, table, generatedData);
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
                 }
-            }
+                return null;
+            });
         }
 
-        return orderedTables;
+        try {
+            executor.invokeAll(tableTasks);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
+    private static void insertDataIntoTable(Connection connection, TableInfo table, List<Map<String, Object>> data) throws SQLException {
+        String tableName = table.getName();
+        List<String> columnNames = table.getColumnNames();
+
+        StringBuilder sql = new StringBuilder("INSERT INTO ").append(tableName).append(" (")
+                .append(String.join(", ", columnNames)).append(") VALUES (")
+                .append("?,".repeat(columnNames.size()).substring(0, columnNames.size() * 2 - 1)).append(")");
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql.toString())) {
+            connection.setAutoCommit(false);
+
+            for (Map<String, Object> row : data) {
+                for (int i = 0; i < columnNames.size(); i++) {
+                    stmt.setObject(i + 1, row.get(columnNames.get(i)));
+                }
+                stmt.addBatch();
+            }
+
+            stmt.executeBatch();
+            connection.commit();
+            System.out.println("Data inserted into table: " + tableName);
+        } catch (SQLException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);  // Reset to default
+        }
+    }
 
     private static boolean hasNoForeignKeyConstraints(TableInfo table) {
         return table.getForeignKeys() == null || table.getForeignKeys().isEmpty();
@@ -120,10 +133,11 @@ public class Seeder {
         return true;
     }
 
-
-    private static void insertDataIntoTable(Connection connection, TableInfo table, List<Map<String, Object>> data) {
+    private static void insertDataIntoTable(TableInfo table, List<Map<String, Object>> data) throws SQLException {
         String tableName = table.getName();
         List<String> columnNames = table.getColumnNames();
+
+        Connection connection = DatabaseConnector.getConnection();
 
         // Build SQL insert statement dynamically based on column names
         StringBuilder sql = new StringBuilder("INSERT INTO " + tableName + " (");
@@ -132,18 +146,41 @@ public class Seeder {
         sql.append("?,".repeat(columnNames.size()).substring(0, columnNames.size() * 2 - 1));
         sql.append(")");
 
+        // Each thread gets its own PreparedStatement
         try (PreparedStatement stmt = connection.prepareStatement(sql.toString())) {
+            // Start transaction
+            connection.setAutoCommit(false);
+
+            // Batch insert data
             for (Map<String, Object> row : data) {
                 for (int i = 0; i < columnNames.size(); i++) {
                     stmt.setObject(i + 1, row.get(columnNames.get(i)));
                 }
                 stmt.addBatch();
             }
+
+            // Execute batch for this chunk
             stmt.executeBatch();
+            connection.commit();  // Commit after batch execution
+
             System.out.println("Data inserted into table: " + tableName);
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            try {
+                // Reset auto-commit to default behavior
+                connection.setAutoCommit(true);
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
+    }
+
+
+    private static void logInsertion(String tableName, int rowCount) {
+        // Periodic logging with timestamp and time taken
+        System.out.println("Inserted " + rowCount + " rows into " + tableName + " at " + new Date() +
+                ". Total records inserted: " + insertedRecords.get());
     }
 }
 
