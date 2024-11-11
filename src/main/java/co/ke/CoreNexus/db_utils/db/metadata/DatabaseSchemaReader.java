@@ -26,9 +26,12 @@ public class DatabaseSchemaReader {
     // Method to retrieve schema information
     public Map<String, SchemaInfo> getSchemaInfo() throws SQLException {
 
+        String databaseName = null;
+        boolean tablesFound = false;
         try (Statement stmt = connection.createStatement();
              ResultSet rs = stmt.executeQuery("SELECT DATABASE();")) {
             if (rs.next()) {
+                databaseName = rs.getString(1);
                 System.out.println("Current database: " + rs.getString(1));
             }
         } catch (SQLException e) {
@@ -40,8 +43,9 @@ public class DatabaseSchemaReader {
         // Get database metadata
         DatabaseMetaData metaData = connection.getMetaData();
 
-        try (ResultSet tablesResultSet = metaData.getTables(null, "public", null, new String[]{"TABLE"})) {
+        try (ResultSet tablesResultSet = metaData.getTables(databaseName, "public", null, new String[]{"TABLE"})) {
             while (tablesResultSet.next()) {
+                tablesFound = true;
                 String tableName = tablesResultSet.getString("TABLE_NAME");
                 System.out.println("Found table: " + tableName);
             }
@@ -69,6 +73,28 @@ public class DatabaseSchemaReader {
                 }
 
                 schemas.put(schemaName, schemaInfo);
+            }
+
+            // If tables are found but no schemas are returned, create the default schema
+            if (tablesFound && schemas.isEmpty()) {
+                System.out.println("No schemas found, creating default schema...");
+                SchemaInfo defaultSchema = new SchemaInfo("default");
+
+                // Add all tables to the "default" schema
+                try (ResultSet allTablesResultSet = metaData.getTables(databaseName, null, null, new String[]{"TABLE"})) {
+                    while (allTablesResultSet.next()) {
+                        String tableName = allTablesResultSet.getString("TABLE_NAME");
+
+                        // Get columns and constraints for each table
+                        TableInfo tableInfo = new TableInfo(tableName);
+                        retrieveColumns(metaData, null, tableName, tableInfo); // Get columns from default schema
+                        retrieveConstraints(metaData, null, tableName, tableInfo); // Get constraints from default schema
+
+                        defaultSchema.addTable(tableInfo);
+                    }
+                }
+
+                schemas.put("default", defaultSchema);
             }
         }
 
