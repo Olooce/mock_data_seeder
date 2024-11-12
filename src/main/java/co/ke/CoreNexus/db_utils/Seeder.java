@@ -23,14 +23,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Seeder {
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 2;
     private static final int CHUNK_SIZE = 500;
+    private static final int BATCH_SIZE = 100;
 
     private static final AtomicInteger insertedRecords = new AtomicInteger(0);
     private static final ThreadPoolExecutor schemaExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE / 2);
     private static final ThreadPoolExecutor chunkExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE / 2);
 
+
     public static void main(String[] args) {
         Thread statusLogger = new Thread(new StatusLogger(), "StatusLogger");
-        int rowCount = 500;
+        int rowCount = 5000;
 
         try (Connection connection = DatabaseConnector.getConnection()) {
             DatabaseSchemaReader databaseMetadata = new DatabaseSchemaReader(connection);
@@ -75,7 +77,7 @@ public class Seeder {
         for (TableInfo table : getTablesInInsertOrder(new ArrayList<>(schema.getTables().values()), schema.getTables())) {
             schemaExecutor.submit(() -> {
                 try  {
-                    generateAndInsertDataInChunks(table, rowCount, CHUNK_SIZE);
+                    generateAndInsertDataInChunks(table, rowCount);
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
@@ -83,14 +85,14 @@ public class Seeder {
         }
     }
 
-    private static void generateAndInsertDataInChunks(TableInfo table, int rowCount, int chunkSize) throws SQLException {
+    private static void generateAndInsertDataInChunks(TableInfo table, int rowCount) throws SQLException {
         int generatedCount = 0;
 
         DataGenerator dataGenerator = new DataGenerator();
 
         while (generatedCount < rowCount) {
             int remaining = rowCount - generatedCount;
-            int currentChunkSize = Math.min(chunkSize, remaining);
+            int currentChunkSize = Math.min(Seeder.CHUNK_SIZE, remaining);
 
             List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, currentChunkSize);
             if (!generatedData.isEmpty()) {
@@ -156,23 +158,26 @@ public class Seeder {
                 .append(String.join(", ", columnNames)).append(") VALUES (")
                 .append("?,".repeat(columnNames.size()).substring(0, columnNames.size() * 2 - 1)).append(")");
 
+
         try (PreparedStatement stmt = connection.prepareStatement(sql.toString())) {
             connection.setAutoCommit(false);
-
             for (Map<String, Object> row : data) {
                 for (int i = 0; i < columnNames.size(); i++) {
                     stmt.setObject(i + 1, row.get(columnNames.get(i)));
                 }
                 stmt.addBatch();
+
+                // Execute the batch if it reaches the batch size
+                int count = 0;
+                if (++count % Seeder.BATCH_SIZE == 0) {
+                    stmt.executeBatch();
+                    connection.commit();
+                }
             }
 
+            // Execute remaining rows
             stmt.executeBatch();
             connection.commit();
-        } catch (SQLException e) {
-            connection.rollback();
-            throw e;
-        } finally {
-            connection.setAutoCommit(true);
         }
     }
 
