@@ -21,11 +21,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  **/
 
 public class Seeder {
-    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 3;
-    private static final int CHUNK_SIZE = 50;
+    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 2;
+    private static final int CHUNK_SIZE = 500;
 
     private static final AtomicInteger insertedRecords = new AtomicInteger(0);
-    private static final ThreadPoolExecutor schemaExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private static final ThreadPoolExecutor schemaExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE / 2);
     private static final ThreadPoolExecutor chunkExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE / 2);
 
     public static void main(String[] args) {
@@ -41,12 +41,11 @@ public class Seeder {
                 return;
             }
 
-            DataGenerator dataGenerator = new DataGenerator();
             List<Callable<Void>> schemaTasks = new ArrayList<>();
 
             for (SchemaInfo schema : schemas.values()) {
                 schemaTasks.add(() -> {
-                    processSchema(dataGenerator, schema, rowCount);
+                    processSchema(schema, rowCount);
                     return null;
                 });
             }
@@ -54,23 +53,29 @@ public class Seeder {
             statusLogger.start();
             schemaExecutor.invokeAll(schemaTasks); // Run all schemas in parallel
 
+            // Wait for all schema executor tasks to complete
+            schemaExecutor.shutdown();
+            schemaExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+
+            // After schema executor finishes, shutdown chunk executor
+            chunkExecutor.shutdown();
+            chunkExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+
             System.out.println("Seeding completed.");
         } catch (SQLException | InterruptedException e) {
             e.printStackTrace();
         } finally {
-            schemaExecutor.shutdown();
-            chunkExecutor.shutdown();
             System.out.println("Total records inserted: " + insertedRecords.get() + ". Stopped at " + new Date());
             DatabaseConnector.close();
             statusLogger.interrupt();  // Stop the status logger
         }
     }
 
-    private static void processSchema(DataGenerator dataGenerator, SchemaInfo schema, int rowCount) {
+    private static void processSchema(SchemaInfo schema, int rowCount) {
         for (TableInfo table : getTablesInInsertOrder(new ArrayList<>(schema.getTables().values()), schema.getTables())) {
             schemaExecutor.submit(() -> {
-                try {
-                    generateAndInsertDataInChunks(dataGenerator, table, rowCount, CHUNK_SIZE);
+                try  {
+                    generateAndInsertDataInChunks(table, rowCount, CHUNK_SIZE);
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
@@ -78,8 +83,10 @@ public class Seeder {
         }
     }
 
-    private static void generateAndInsertDataInChunks(DataGenerator dataGenerator, TableInfo table, int rowCount, int chunkSize) throws SQLException {
+    private static void generateAndInsertDataInChunks(TableInfo table, int rowCount, int chunkSize) throws SQLException {
         int generatedCount = 0;
+
+        DataGenerator dataGenerator = new DataGenerator();
 
         while (generatedCount < rowCount) {
             int remaining = rowCount - generatedCount;
@@ -88,7 +95,7 @@ public class Seeder {
             List<Map<String, Object>> generatedData = dataGenerator.generateDataForTable(table, currentChunkSize);
             if (!generatedData.isEmpty()) {
                 chunkExecutor.submit(() -> {
-                    try ( Connection connection = DatabaseConnector.getConnection()){
+                    try (Connection connection = DatabaseConnector.getConnection()){
                         insertDataIntoTable(connection, table, generatedData);
                         insertedRecords.addAndGet(generatedData.size());
                     } catch (SQLException e) {
