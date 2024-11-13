@@ -25,6 +25,8 @@ public class Seeder {
     private static final int CHUNK_SIZE = 500;
     private static final int BATCH_SIZE = 100;
 
+    //TODO: load variables as configs from external xml file. Hardcoding values doesn't make sense
+
     private static final AtomicInteger insertedRecords = new AtomicInteger(0);
     private static final ThreadPoolExecutor schemaExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE / 2);
     private static final ThreadPoolExecutor chunkExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(THREAD_POOL_SIZE / 2);
